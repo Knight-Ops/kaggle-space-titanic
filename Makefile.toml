@@ -1,0 +1,29 @@
+[tasks.format]
+install_crate = "rustfmt"
+command = "cargo"
+args = ["fmt", "--", "--emit=files"]
+
+[tasks.clean]
+command = "cargo"
+args = ["clean"]
+
+[tasks.build]
+env ={ "LD_LIBRARY_PATH" = "/home/carl/Downloads/libtorch/lib/:$LD_LIBRARY_PATH", "LIBTORCH" = "/home/carl/Downloads/libtorch", "LIBTORCH_BYPASS_VERSION_CHECK" = "1", "HSA_OVERRIDE_GFX_VERSION" = "11.0.0"}
+command = "cargo"
+args = ["build"]
+# dependencies = ["clean"]
+
+[tasks.release]
+env ={ "LD_LIBRARY_PATH" = "/home/carl/Downloads/libtorch/lib/:$LD_LIBRARY_PATH", "LIBTORCH" = "/home/carl/Downloads/libtorch", "LIBTORCH_BYPASS_VERSION_CHECK" = "1", "HSA_OVERRIDE_GFX_VERSION" = "11.0.0"}
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.run]
+env ={ "LD_LIBRARY_PATH" = "/home/carl/Downloads/libtorch/lib/:$LD_LIBRARY_PATH", "LIBTORCH" = "/home/carl/Downloads/libtorch", "LIBTORCH_BYPASS_VERSION_CHECK" = "1", "HSA_OVERRIDE_GFX_VERSION" = "11.0.0"}
+command = "cargo"
+args = ["run"]
+
+[tasks.run-release]
+env ={ "LD_LIBRARY_PATH" = "/home/carl/Downloads/libtorch/lib/:$LD_LIBRARY_PATH", "LIBTORCH" = "/home/carl/Downloads/libtorch", "LIBTORCH_BYPASS_VERSION_CHECK" = "1", "HSA_OVERRIDE_GFX_VERSION" = "11.0.0"}
+command = "cargo"
+args = ["run", "--release"]
