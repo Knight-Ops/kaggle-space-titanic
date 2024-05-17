@@ -1,7 +1,10 @@
 use burn::{
     config::Config,
     module::Module,
-    nn::{loss::CrossEntropyLossConfig, Dropout, DropoutConfig, Linear, LinearConfig, Relu},
+    nn::{
+        loss::{BinaryCrossEntropyLossConfig, CrossEntropyLossConfig},
+        Dropout, DropoutConfig, Linear, LinearConfig, Relu,
+    },
     tensor::{
         backend::{AutodiffBackend, Backend},
         Tensor,
@@ -14,8 +17,8 @@ use crate::data::TitanicBatch;
 #[derive(Module, Debug)]
 pub struct Model<B: Backend> {
     input_layer: Linear<B>,
-    hidden_layer: Linear<B>,
-    second_hidden_layer: Linear<B>,
+    // hidden_layer: Linear<B>,
+    // second_hidden_layer: Linear<B>,
     output_layer: Linear<B>,
     dropout: Dropout,
     activation: Relu,
@@ -27,14 +30,16 @@ impl<B: Backend> Model<B> {
 
         let x = self.input_layer.forward(x);
         let x = self.dropout.forward(x);
-        // let x = self.activation.forward(x);
-        let x = self.hidden_layer.forward(x);
-        let x = self.dropout.forward(x);
-        // let x = self.activation.forward(x);
-        let x = self.second_hidden_layer.forward(x);
-        let x = self.dropout.forward(x);
         let x = self.activation.forward(x);
-        self.output_layer.forward(x)
+        // let x = self.hidden_layer.forward(x);
+        // let x = self.dropout.forward(x);
+        // let x = self.activation.forward(x);
+        // let x = self.second_hidden_layer.forward(x);
+        // let x = self.dropout.forward(x);
+        // let x = self.activation.forward(x);
+        let x = self.output_layer.forward(x);
+
+        x
     }
 
     pub fn forward_step(&self, item: TitanicBatch<B>) -> ClassificationOutput<B> {
@@ -51,8 +56,9 @@ impl<B: Backend> Model<B> {
 
 #[derive(Config, Debug)]
 pub struct ModelConfig {
+    #[config(default = 39)]
     num_features: usize,
-    #[config(default = 48)]
+    #[config(default = 28)]
     hidden_size: usize,
     #[config(default = "0.35")]
     dropout: f64,
@@ -62,16 +68,24 @@ impl ModelConfig {
     /// Returns the initialized model
     pub fn init<B: Backend>(&self, device: &B::Device) -> Model<B> {
         Model {
-            input_layer: LinearConfig::new(self.num_features, self.num_features * 2)
+            // input_layer: LinearConfig::new(self.num_features, self.num_features * 2)
+            //     .with_bias(true)
+            //     .init(device),
+            // hidden_layer: LinearConfig::new(self.num_features * 2, self.hidden_size)
+            //     .with_bias(true)
+            //     .init(device),
+            // second_hidden_layer: LinearConfig::new(self.hidden_size, self.hidden_size / 2)
+            //     .with_bias(true)
+            //     .init(device),
+            // output_layer: LinearConfig::new(self.hidden_size / 2, 2)
+            //     .with_bias(true)
+            //     .init(device),
+            // activation: Relu::new(),
+            // dropout: DropoutConfig::new(self.dropout).init(),
+            input_layer: LinearConfig::new(self.num_features, self.hidden_size)
                 .with_bias(true)
                 .init(device),
-            hidden_layer: LinearConfig::new(self.num_features * 2, self.hidden_size)
-                .with_bias(true)
-                .init(device),
-            second_hidden_layer: LinearConfig::new(self.hidden_size, self.hidden_size / 2)
-                .with_bias(true)
-                .init(device),
-            output_layer: LinearConfig::new(self.hidden_size / 2, 2)
+            output_layer: LinearConfig::new(self.hidden_size, 2)
                 .with_bias(true)
                 .init(device),
             activation: Relu::new(),

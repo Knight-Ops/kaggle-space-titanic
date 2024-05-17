@@ -14,12 +14,6 @@ impl<B: Backend> TitanicBatcher<B> {
     pub fn new(device: B::Device) -> Self {
         Self { device }
     }
-
-    pub fn min_max_norm<const D: usize>(&self, inp: Tensor<B, D>) -> Tensor<B, D> {
-        let min = inp.clone().min_dim(0);
-        let max = inp.clone().max_dim(0);
-        (inp.clone() - min.clone()).div(max - min)
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -50,47 +44,82 @@ impl<B: Backend> Batcher<TitanicItem, TitanicBatch<B>> for TitanicBatcher<B> {
 
         // We should change some of these into one_hot encoding for categories
         for item in items.iter() {
-            let input_tensor = Tensor::<B, 1>::from_floats(
-                [
-                    item.group_number as f32,
-                    item.passenger_number as f32,
-                    // item.home_planet.clone() as usize as f32,
-                    // item.cryo_sleep as usize as f32,
-                    // item.cabin_deck.clone() as usize as f32,
-                    item.cabin_number as f32,
-                    // item.cabin_side.clone() as usize as f32,
-                    // item.desintation.clone() as usize as f32,
-                    item.age,
-                    // item.vip as usize as f32,
-                    item.room_service,
-                    item.food_court,
-                    item.shopping_mall,
-                    item.spa,
-                    item.vr_deck,
-                    // To call this feature engineering would be kind. Just add up the total spending of an individual
-                    item.room_service
-                        + item.food_court
-                        + item.shopping_mall
-                        + item.spa
-                        + item.vr_deck,
-                    // Add up the total spending and divide by age, this could represent how affluent someone is (Or how irresponsbile)
-                    // (item.room_service
-                    //     + item.food_court
-                    //     + item.shopping_mall
-                    //     + item.spa
-                    //     + item.vr_deck)
-                    //     / item.age,
-                ],
-                &self.device,
-            );
+            let total_spending =
+                item.room_service + item.food_court + item.shopping_mall + item.spa + item.vr_deck;
+
+            let input_tensor = if total_spending > 0.0 {
+                Tensor::<B, 1>::from_floats(
+                    [
+                        item.group_number as f32,
+                        item.passenger_number as f32,
+                        item.cabin_number as f32,
+                        item.age,
+                        // Normalize the spending to a percentage of where the money is spent
+                        item.room_service / total_spending,
+                        item.food_court / total_spending,
+                        item.shopping_mall / total_spending,
+                        item.spa / total_spending,
+                        item.vr_deck / total_spending,
+                        // To call this feature engineering would be kind. Just add up the total spending of an individual
+                        total_spending,
+                    ],
+                    &self.device,
+                )
+            } else {
+                Tensor::<B, 1>::from_floats(
+                    [
+                        item.group_number as f32,
+                        item.passenger_number as f32,
+                        item.cabin_number as f32,
+                        item.age,
+                        // Normalize the spending to a percentage of where the money is spent
+                        item.room_service,
+                        item.food_court,
+                        item.shopping_mall,
+                        item.spa,
+                        item.vr_deck,
+                        // To call this feature engineering would be kind. Just add up the total spending of an individual
+                        total_spending,
+                    ],
+                    &self.device,
+                )
+            };
+
+            // let input_tensor = Tensor::<B, 1>::from_floats(
+            //     [
+            //         item.group_number as f32,
+            //         item.passenger_number as f32,
+            //         item.cabin_number as f32,
+            //         item.age,
+            //         item.room_service,
+            //         item.food_court,
+            //         item.shopping_mall,
+            //         item.spa,
+            //         item.vr_deck,
+            //     ],
+            //     &self.device,
+            // );
+
+            let spent_money = if total_spending == 0.0 {
+                Tensor::one_hot(0, 2, &self.device)
+            } else {
+                Tensor::one_hot(1, 2, &self.device)
+            };
+
+            let affluence = if item.age > 0.0 {
+                Tensor::<B, 1>::from_floats([total_spending / item.age], &self.device)
+            } else {
+                Tensor::<B, 1>::from_floats([0.0], &self.device)
+            };
+
             let home_planet: Tensor<B, 1> =
                 Tensor::one_hot(item.home_planet as usize, 4, &self.device);
             let cryo_sleep: Tensor<B, 1> =
                 Tensor::one_hot(if item.cryo_sleep { 1 } else { 0 }, 2, &self.device);
             let cabin_deck: Tensor<B, 1> =
-                Tensor::one_hot(item.cabin_deck as usize, 10, &self.device);
+                Tensor::one_hot(item.cabin_deck as usize, 11, &self.device);
             let cabin_side: Tensor<B, 1> =
-                Tensor::one_hot(item.cabin_side as usize, 2, &self.device);
+                Tensor::one_hot(item.cabin_side as usize, 3, &self.device);
             let destination: Tensor<B, 1> =
                 Tensor::one_hot(item.desintation as usize, 4, &self.device);
             let vip: Tensor<B, 1> = Tensor::one_hot(if item.vip { 1 } else { 0 }, 2, &self.device);
@@ -98,6 +127,8 @@ impl<B: Backend> Batcher<TitanicItem, TitanicBatch<B>> for TitanicBatcher<B> {
             let combination = Tensor::cat(
                 vec![
                     input_tensor,
+                    affluence,
+                    spent_money,
                     home_planet,
                     cryo_sleep,
                     cabin_deck,

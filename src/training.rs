@@ -1,4 +1,8 @@
 use crate::{data::TitanicBatcher, dataset::TitanicDataset, model::ModelConfig};
+use burn::train::metric::store::{Aggregate, Direction, Split};
+use burn::train::metric::CudaMetric;
+use burn::train::MetricEarlyStoppingStrategy;
+use burn::train::StoppingCondition;
 use burn::{config::Config, data::dataset::Dataset, record::NoStdTrainingRecorder};
 use burn::{
     data::dataloader::DataLoaderBuilder,
@@ -16,24 +20,23 @@ const ARTIFACT_DIR: &'static str = "/tmp/titanic";
 
 #[derive(Config)]
 pub struct TrainingConfig {
+    pub model: ModelConfig,
     pub optimzer: AdamConfig,
     #[config(default = 1500)]
     pub num_epochs: usize,
     #[config(default = 512)]
     pub batch_size: usize,
-    #[config(default = 64)]
+    #[config(default = 24)]
     pub num_workers: usize,
     #[config(default = 42)]
     pub seed: u64,
     #[config(default = 1.0e-4)]
     pub learning_rate: f64,
-    #[config(default = 34)]
-    pub input_feature_len: usize,
 }
 
 pub fn run<B: AutodiffBackend>(device: B::Device) {
     let optimizer = AdamConfig::new();
-    let config = TrainingConfig::new(optimizer);
+    let config = TrainingConfig::new(ModelConfig::new(), optimizer).with_num_epochs(5000);
     B::seed(config.seed);
 
     let train_dataset = TitanicDataset::train();
@@ -63,12 +66,20 @@ pub fn run<B: AutodiffBackend>(device: B::Device) {
         .metric_valid_numeric(AccuracyMetric::new())
         .metric_train_numeric(LossMetric::new())
         .metric_valid_numeric(LossMetric::new())
+        .metric_train(CudaMetric::new())
+        .metric_valid(CudaMetric::new())
         .with_file_checkpointer(CompactRecorder::new())
+        // .early_stopping(MetricEarlyStoppingStrategy::new::<LossMetric<B>>(
+        //     Aggregate::Mean,
+        //     Direction::Lowest,
+        //     Split::Valid,
+        //     StoppingCondition::NoImprovementSince { n_epochs: 50 },
+        // ))
         .devices(vec![device.clone()])
         .num_epochs(config.num_epochs)
         .summary()
         .build(
-            ModelConfig::new(config.input_feature_len).init::<B>(&device),
+            config.model.init::<B>(&device),
             config.optimzer.init(),
             config.learning_rate,
         );
@@ -80,9 +91,6 @@ pub fn run<B: AutodiffBackend>(device: B::Device) {
         .unwrap();
 
     model_trained
-        .save_file(
-            format!("{ARTIFACT_DIR}/model"),
-            &NoStdTrainingRecorder::new(),
-        )
+        .save_file(format!("{ARTIFACT_DIR}/model"), &CompactRecorder::new())
         .expect("Failed to save trained model");
 }
